@@ -30,12 +30,13 @@ expand_paths() {
   local expanded_paths=()
   
   for path in "${input_paths[@]}"; do
-    # 转换为绝对路径
-      local abs_path=$(cd "$(dirname "$path")" && pwd)/$(basename "$path")
-    
-    if [ -d "$abs_path" ]; then
-      # 是目录：读取目录内所有内容（非隐藏文件/目录）
-        echo "检测到目录，自动展开内容: $abs_path" >&2
+    # 转换为绝对路径并去掉末尾斜杠
+    local abs_path=$(cd "$(dirname "$path")" && pwd)/$(basename "$path")
+    local path_no_slash="${abs_path%/}"
+
+    # 如果是目录且不是 .app 包，则展开目录内容；.app 包视为单个对象直接加入
+    if [ -d "$abs_path" ] && [[ "$path_no_slash" != *.app ]]; then
+      echo "检测到目录，自动展开内容: $abs_path" >&2
       local dir_contents=("$abs_path"/*)
       # 过滤空目录（避免添加无效路径）
       if [ -e "${dir_contents[0]}" ]; then
@@ -43,18 +44,18 @@ expand_paths() {
           # 跳过隐藏文件（以 . 开头）
           if [[ $(basename "$item") != .* ]]; then
             expanded_paths+=("$item")
-              echo "  ✅ 加入打包: $(basename "$item")" >&2
+            echo "  ✅ 加入打包: $(basename "$item")" >&2
           fi
         done
       else
-          echo "⚠️  目录为空，跳过: $abs_path" >&2
+        echo "⚠️  目录为空，跳过: $abs_path" >&2
       fi
-    elif [ -f "$abs_path" ]; then
-      # 是文件：直接加入
+    elif [ -e "$abs_path" ]; then
+      # 文件或 .app 包：直接加入（.app 不会被展开）
       expanded_paths+=("$abs_path")
-        echo "✅ 加入打包: $(basename "$abs_path")" >&2
+      echo "✅ 加入打包: $(basename "$abs_path")" >&2
     else
-        echo "⚠️  路径无效，跳过: $abs_path" >&2
+      echo "⚠️  路径无效，跳过: $abs_path" >&2
     fi
   done
   
@@ -74,9 +75,11 @@ fi
 # 分离输入路径和输出DMG路径
 INPUT_PATHS=()
 OUTPUT_DMG=""
+OUTPUT_SPECIFIED=false
 for arg in "$@"; do
   if [[ "$arg" == *.dmg && -z "$OUTPUT_DMG" ]]; then
     OUTPUT_DMG="$arg"
+    OUTPUT_SPECIFIED=true
   else
     INPUT_PATHS+=("$arg")
   fi
@@ -104,14 +107,33 @@ fi
 
 # 处理默认输出文件名（优先取第一个有效输入路径的名称）
 if [ -z "$OUTPUT_DMG" ]; then
-  first_input=$(basename "${EXPANDED_PATHS[0]}")
-  base_name=${first_input%.app}
-  base_name=${base_name%.dmg}
+  # 优先使用原始输入的目录名或文件名来命名 DMG（若无法判断则使用 output.dmg）
+  raw_first="${INPUT_PATHS[0]}"
+  # 转为绝对路径并去掉末尾斜杠
+  abs_first=$(cd "$(dirname "$raw_first")" && pwd)/$(basename "$raw_first")
+  first_no_slash="${abs_first%/}"
+
+  if [[ "$first_no_slash" == *.app ]]; then
+    base_name=$(basename "$first_no_slash" .app)
+  elif [ -d "$first_no_slash" ]; then
+    base_name=$(basename "$first_no_slash")
+  elif [ -f "$first_no_slash" ]; then
+    base_name=$(basename "$first_no_slash")
+    base_name=${base_name%.*}
+  else
+    base_name="output"
+  fi
+
   OUTPUT_DMG="${base_name}.dmg"
 fi
-
-# 转换为绝对路径（避免相对路径问题）
-OUTPUT_DMG_ABS=$(cd "$(dirname "$OUTPUT_DMG")" && pwd)/$(basename "$OUTPUT_DMG")
+# 如果用户未指定输出路径，则将 DMG 放在第一个输入路径所在目录
+if [ "$OUTPUT_SPECIFIED" = false ]; then
+  # abs_first 已在上面计算
+  OUTPUT_DMG_ABS="$(cd "$(dirname "$abs_first")" && pwd)/$(basename "$OUTPUT_DMG")"
+else
+  # 用户指定了输出路径，按原逻辑转为绝对路径
+  OUTPUT_DMG_ABS=$(cd "$(dirname "$OUTPUT_DMG")" && pwd)/$(basename "$OUTPUT_DMG")
+fi
 # 覆盖已存在的输出文件
 if [ -f "$OUTPUT_DMG_ABS" ]; then
   echo "提示: 输出文件已存在，将覆盖: $OUTPUT_DMG_ABS"
