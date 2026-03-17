@@ -10,7 +10,7 @@ macOS 一键快速操作工具包。精选实用应用，放入 Finder 工具栏
   
 - **app-to-dmg**  将 .app 应用/目录打包为 .dmg 镜像文件
   
-- **remove_quarantine**  移除应用隔离属性，解决"无法打开"问题
+- **remove_quarantine**  移除应用隔离属性，解决未签名应用"无法打开"问题
   
 - **[TinyImage](https://github.com/iHongRen/TinyImage)**  图片无损压缩，减小文件大小
 
