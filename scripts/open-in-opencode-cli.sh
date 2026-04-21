@@ -32,17 +32,23 @@ run_iterm() {
         osascript - "$dir" "$CLI_CMD" <<'APPLESCRIPT'
 on run argv
     set cmd to ("cd " & quoted form of (item 1 of argv) & " && " & (item 2 of argv))
+    set isRunning to application "iTerm" is running
     tell application "iTerm"
         activate
-        if (count of windows) = 0 then
-            create window with default profile
-        end if
-        tell current window
-            create tab with default profile
-            tell current session
-                write text cmd
+        if isRunning and (count of windows) > 0 then
+            tell current window
+                create tab with default profile
+                tell the current session
+                    write text cmd
+                end tell
             end tell
-        end tell
+        else
+            tell current window
+                tell the current session
+                    write text cmd
+                end tell
+            end tell
+        end if
     end tell
 end run
 APPLESCRIPT
